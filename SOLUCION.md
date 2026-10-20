@@ -180,10 +180,10 @@ Las decisiones de arquitectura con su alternativa descartada están en [`docs/de
 - **Claude Code (Claude Opus 5.5)**, con subagentes en paralelo (uno para persistencia y otro para pruebas y CI).
 - **Cómo nos repartimos el trabajo**: las decisiones fueron mías y Claude me acompañó en la ejecución. Yo definí el alcance y las prioridades: qué controles de producción incluir (autenticación, concurrencia, persistencia, pruebas y CI), Neon como base de datos, trabajar con subagentes en paralelo, qué dejar fuera del alcance y dejar la base limpia para la evaluación. Claude propuso el diseño técnico, que yo aprobé, y escribió el código, las pruebas y la documentación. Yo verifiqué el resultado en producción.
 - **Qué revisamos o descartamos**:
-  - Descarté que `oc_crear` aceptara el payload del modelo como fuente de verdad: se recalcula y se compara.
-  - Descarté ajustar el precio de la OC al de la cotización: se confirma, no se corrige.
-  - Descarté un lock de sesión con transacción abierta durante la llamada al LLM (retendría una conexión del pool hasta 60 s): se usa un *lease* con caducidad.
-  - Descarté buscar-y-luego-crear la OC en dos pasos (carrera entre ambos): es un único paso atómico bajo lock.
+  - Se descartó que `oc_crear` aceptara el payload del modelo como fuente de verdad: se recalcula y se compara.
+  - Se descartó ajustar el precio de la OC al de la cotización: se confirma, no se corrige.
+  - Se descartó un lock de sesión con transacción abierta durante la llamada al LLM (retendría una conexión del pool hasta 60 s): se usa un *lease* con caducidad.
+  - Se descartó buscar-y-luego-crear la OC en dos pasos (carrera entre ambos): es un único paso atómico bajo lock.
 - Todo el código es TypeScript estricto sin `any` y pasa typecheck, lint y tests en la CI.
 
 ## 13. Riesgos de producción y mitigación
