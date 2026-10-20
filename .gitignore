@@ -1,0 +1,7 @@
+node_modules/
+out/
+data/
+scratch/
+coverage/
+.env
+.claude/settings.local.json

@@ -1,0 +1,14 @@
+{
+  "sociedad": "1000",
+  "organizacion_compras": "1000",
+  "tolerancia_cotizacion": 0.02,
+  "tolerancia_monto": 1,
+  "palabra_aprobacion": "aprobado",
+  "max_descripcion": 40,
+  "paso_posicion": 10,
+  "numero_oc_inicial": 4500000001,
+  "unidades": [
+    { "unidad": "H", "patron": "\\bhoras?\\b" },
+    { "unidad": "MES", "patron": "\\b(mensualidad|mensual|por mes)\\b" }
+  ]
+}
