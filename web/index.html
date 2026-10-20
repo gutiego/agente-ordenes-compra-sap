@@ -49,14 +49,34 @@
   form button { background: var(--accent); color: #fff; border: 0; border-radius: 8px; padding: 0 18px; font-weight: 600; cursor: pointer; }
   form button:disabled { opacity: .5; cursor: wait; }
   .sugerencias { display: flex; gap: 6px; flex-wrap: wrap; }
+  #acceso { position: fixed; inset: 0; background: var(--bg); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 10; }
+  #acceso form { flex-direction: column; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); padding: 24px; width: 100%; max-width: 380px; gap: 10px; }
+  #acceso h2 { margin: 0; font-size: 18px; }
+  #acceso p { margin: 0; color: var(--muted); font-size: 13px; }
+  #acceso input { padding: 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font: inherit; }
+  #acceso button { padding: 10px; }
+  #acceso .err { color: var(--err); font-size: 13px; min-height: 18px; }
+  .oculto { display: none !important; }
+  #auditoria { flex: 1; overflow: auto; padding: 16px 0; }
+  #auditoria table { border-collapse: collapse; font-size: 13px; width: 100%; }
+  #auditoria th, #auditoria td { border: 1px solid var(--border); padding: 4px 8px; text-align: left; }
   .sugerencias button { font-size: 13px; border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 99px; padding: 4px 10px; cursor: pointer; }
 </style>
 </head>
 <body>
+<div id="acceso">
+  <form id="form-acceso">
+    <h2>Acceso</h2>
+    <p>Ingresa tu token de acceso. Se guarda solo en esta pestaña.</p>
+    <input id="token" type="password" autocomplete="off" placeholder="Token" required>
+    <div class="err" id="err-acceso"></div>
+    <button type="submit">Entrar</button>
+  </form>
+</div>
 <div class="app">
   <header>
     <div><h1>Agente · Órdenes de Compra SAP</h1><div class="meta" id="meta">conectando…</div></div>
-    <button id="nueva" type="button">Nueva sesión</button>
+    <div style="display:flex;gap:8px;align-items:center"><span class="meta" id="quien"></span><button id="nueva" type="button">Nueva sesión</button><button id="salir" type="button">Salir</button></div>
   </header>
   <div id="chat">
     <div class="msg">
@@ -70,6 +90,7 @@
       </div>
     </div>
   </div>
+  <div id="auditoria" class="oculto"><h3>Log de control</h3><div id="tabla-control">Cargando…</div></div>
   <div id="pensando">El agente está pensando…</div>
   <form id="form">
     <textarea id="entrada" placeholder="Escribe un mensaje… (Enter para enviar, Shift+Enter para salto de línea)"></textarea>
@@ -80,16 +101,35 @@
 const $ = (id) => document.getElementById(id)
 const chat = $("chat")
 let sessionId = null
-try { sessionId = localStorage.getItem("sessionId") } catch {}
+let token = null
+let usuario = null
+try { token = sessionStorage.getItem("token") } catch {}
+const claveSesion = () => `sessionId:${usuario?.usuario}`
+
+/** fetch con el token. Un 401 devuelve a la pantalla de acceso. */
+async function api(url, init = {}) {
+  const r = await fetch(url, { ...init, headers: { ...(init.headers || {}), Authorization: `Bearer ${token}` } })
+  if (r.status === 401) { salir(); throw new Error("sesión expirada: vuelve a ingresar el token") }
+  return r
+}
 
 const md = (t) => DOMPurify.sanitize(marked.parse(t || ""))
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c])
 const json = (v) => { try { return JSON.stringify(typeof v === "string" ? JSON.parse(v) : v, null, 2) } catch { return String(v) } }
 
 function enlazarRutas(html) {
-  // Convierte rutas out/... en enlaces de descarga.
-  return html.replace(/(?<![\w/"])out\/([\w./-]+\.(?:txt|pdf|json|csv|jsonl))/g, (m, rel) => `<a href="/api/archivos/${rel}" target="_blank">${m}</a>`)
+  // Convierte rutas api/evidencias/... en enlaces; se abren con fetch autenticado (un <a> normal no envía el token).
+  return html.replace(/(?<![\w/"])\/?(api\/evidencias\/[\w-]+\/aprobacion\.(?:txt|pdf))/g, (m, rel) => `<a href="#" data-archivo="/${rel}">${m}</a>`)
 }
+
+chat.addEventListener("click", async (ev) => {
+  const a = ev.target.closest("a[data-archivo]")
+  if (!a) return
+  ev.preventDefault()
+  const r = await api(a.dataset.archivo)
+  if (!r.ok) return alert("No se pudo abrir el archivo")
+  window.open(URL.createObjectURL(await r.blob()), "_blank")
+})
 
 function pintarAgente(e) {
   const div = document.createElement("div")
@@ -133,11 +173,11 @@ async function enviar(texto) {
   $("pensando").style.display = "block"
   bajar()
   try {
-    const r = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(sessionId ? { sessionId, message: texto } : { message: texto }) })
+    const r = await api("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(sessionId ? { sessionId, message: texto } : { message: texto }) })
     const d = await r.json()
     if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`)
     sessionId = d.sessionId
-    try { localStorage.setItem("sessionId", sessionId) } catch {}
+    try { localStorage.setItem(claveSesion(), sessionId) } catch {}
     pintarAgente({ texto: d.reply, toolCalls: d.toolCalls, needsConfirmation: d.needsConfirmation, error: d.error })
   } catch (e) {
     pintarAgente({ texto: `⚠️ No se pudo completar la solicitud: ${e.message}`, error: true })
@@ -150,7 +190,7 @@ async function enviar(texto) {
 
 async function cargarHistorial() {
   if (!sessionId) return
-  const r = await fetch(`/api/sessions/${sessionId}`)
+  const r = await api(`/api/sessions/${sessionId}`)
   if (!r.ok) return
   const d = await r.json()
   for (const e of d.historial) e.rol === "usuario" ? pintarUsuario(e.texto) : pintarAgente(e)
@@ -161,10 +201,50 @@ async function cargarHistorial() {
 $("form").onsubmit = (ev) => { ev.preventDefault(); enviar($("entrada").value) }
 $("entrada").onkeydown = (ev) => { if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); enviar($("entrada").value) } }
 document.querySelectorAll(".sugerencias button").forEach((b) => (b.onclick = () => enviar(b.dataset.texto)))
-$("nueva").onclick = () => { try { localStorage.removeItem("sessionId") } catch {}; location.reload() }
+$("nueva").onclick = () => { try { localStorage.removeItem(claveSesion()) } catch {}; location.reload() }
+$("salir").onclick = () => salir()
 
-fetch("/api/health").then((r) => r.json()).then((h) => ($("meta").textContent = `proveedor: ${h.provider} · modelo: ${h.model ?? "—"}`)).catch(() => ($("meta").textContent = "sin conexión con el servidor"))
-cargarHistorial()
+function salir() {
+  try { sessionStorage.removeItem("token") } catch {}
+  location.reload()
+}
+
+async function cargarControl() {
+  const r = await api("/api/control")
+  const { filas } = await r.json()
+  const cols = ["ts", "solicitud_id", "resultado", "numero_oc", "retroactiva", "bloqueos", "confirmaciones", "usuario"]
+  const celda = (v) => esc(Array.isArray(v) ? v.join(", ") : v ?? "")
+  $("tabla-control").innerHTML = filas.length
+    ? `<table><tr>${cols.map((c) => `<th>${c}</th>`).join("")}</tr>${filas.map((f) => `<tr>${cols.map((c) => `<td>${celda(f[c])}</td>`).join("")}</tr>`).join("")}</table>`
+    : "Sin registros todavía."
+}
+
+/** Valida el token contra /api/me y arma la vista según el rol. */
+async function entrar() {
+  const r = await fetch("/api/me", { headers: { Authorization: `Bearer ${token}` } })
+  if (!r.ok) throw new Error(r.status === 401 ? "Token inválido." : `Error ${r.status}`)
+  usuario = await r.json()
+  try { sessionStorage.setItem("token", token) } catch {}
+  $("acceso").classList.add("oculto")
+  $("quien").textContent = `${usuario.usuario} · ${usuario.rol}`
+  if (usuario.rol === "auditor") {
+    // El auditor solo consulta: sin chat.
+    for (const id of ["chat", "form", "nueva"]) $(id).classList.add("oculto")
+    $("auditoria").classList.remove("oculto")
+    return cargarControl()
+  }
+  try { sessionId = localStorage.getItem(claveSesion()) } catch {}
+  cargarHistorial()
+}
+
+$("form-acceso").onsubmit = async (ev) => {
+  ev.preventDefault()
+  token = $("token").value.trim()
+  try { await entrar() } catch (e) { $("err-acceso").textContent = e.message }
+}
+
+fetch("/api/health").then((r) => r.json()).then((h) => ($("meta").textContent = `proveedor: ${h.provider} · modelo: ${h.model ?? "—"} · base: ${h.db}`)).catch(() => ($("meta").textContent = "sin conexión con el servidor"))
+if (token) entrar().catch(() => { token = null })
 </script>
 </body>
 </html>

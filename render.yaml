@@ -1,14 +1,23 @@
-# Despliegue en Render (Blueprint). La clave se ingresa en el panel de Render, nunca aquí.
+# Despliegue en Render (Blueprint). Los secretos se ingresan en el panel de Render, nunca aquí.
+# autoDeployTrigger: checksPass → Render solo despliega un commit de main cuando la CI de GitHub pasó.
 services:
   - type: web
-    name: reto-03-ordenes-compra-sap
+    name: agente-ordenes-compra-sap
     runtime: node
     plan: free
+    region: oregon # misma región que la base en Neon (us-west-2)
     buildCommand: npm ci
     startCommand: npm start
     healthCheckPath: /api/health
+    autoDeployTrigger: checksPass
     envVars:
+      - key: NODE_VERSION
+        value: "24"
       - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: AUTH_TOKENS
         sync: false
       - key: LLM_MODEL
         value: claude-opus-5-5
@@ -16,3 +25,5 @@ services:
         value: "25"
       - key: MAX_TOKENS_SESION
         value: "400000"
+      - key: LIMITE_CHAT_MINUTO
+        value: "20"
