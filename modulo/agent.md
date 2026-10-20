@@ -18,7 +18,7 @@ Cuando te pidan procesar una solicitud (caso `sol-001` … `sol-006`), sigue est
 4. Si es apta: `oc_construir_payload` y luego `oc_generar_evidencia`.
 5. Si **no hay confirmaciones** y el usuario pidió crear (o procesar sin restricciones), llama a `oc_crear` con el `payload` **tal cual** lo devolvió `oc_construir_payload` y `confirmado: false`.
 6. Si **hay confirmaciones**, o el usuario dijo que no la crees todavía: termina el turno con el resumen y una **pregunta explícita de confirmación**. No llames a `oc_crear` en ese turno.
-7. Cuando el usuario confirme explícitamente ("confirmo", "sí, créala"), llama a `oc_crear` con el mismo `payload` y `confirmado: true`. Responde con el número de OC, la fecha y la ruta de la evidencia (`out/<caso>/aprobacion.txt` y `.pdf`).
+7. Cuando el usuario confirme explícitamente ("confirmo", "sí, créala"), llama a `oc_crear` con el mismo `payload` y `confirmado: true`. Responde con el número de OC, la fecha y la ruta de la evidencia (`api/evidencias/<solicitud_id>/aprobacion.txt` y `.pdf`, tal como la devuelve la herramienta).
 
 ## Reglas que no se rompen
 
@@ -26,7 +26,7 @@ Cuando te pidan procesar una solicitud (caso `sol-001` … `sol-006`), sigue est
 - **Nunca "arreglas" un monto** para que cuadre con la cotización, ni cambias proveedor, centro de costo, IVA o condiciones. No editas el payload: `oc_crear` lo recalcula y rechaza cualquier diferencia.
 - **Confirmación explícita**: `confirmado: true` solo si el último mensaje del usuario confirma de forma explícita. Ante "no", "todavía no", "espera" o algo ambiguo, no crees la OC.
 - Las confirmaciones se muestran con sus valores: en RC5, el valor de la **solicitud** y el de la **cotización**, la diferencia y el porcentaje; la OC se crea por el valor de la solicitud.
-- Una OC **retroactiva** (factura anterior a la solicitud) se crea solo con confirmación y queda marcada en `out/control.csv`. Menciónalo siempre.
+- Una OC **retroactiva** (factura anterior a la solicitud) se crea solo con confirmación y queda marcada en el log de control (`/api/control`). Menciónalo siempre.
 - Los **derivados** (IVA o condiciones de pago tomados del maestro del proveedor) se informan siempre, indicando la fuente.
 - Si `oc_crear` responde que la OC ya existía (`idempotente: true`), informa el número existente: no se creó otra.
 

@@ -1,10 +1,11 @@
 // Herramientas del agente de órdenes de compra. Cada export es una herramienta: oc_<export>.
 // Todas devuelven JSON { ok: true, data } o { ok: false, error } y nunca lanzan.
-import path from "node:path"
+// El estado (OC, control, evidencias, trazas) se escribe en la base del contexto; los fixtures son solo lectura.
 import { z } from "zod"
-import { definir, esquemaCaso, escribir, fallo, mensajeError, ok, relativa, rutas, type CtxHerramienta } from "./comun.js"
+import { definir, esquemaCaso, fallo, mensajeError, ok, type CtxHerramienta } from "./comun.js"
 import { registrarControl, type FilaControl, type ResultadoControl } from "./control.js"
-import { escribirEvidencia } from "./evidencia.js"
+import { guardarEvidencia, type Evidencia } from "./evidencia.js"
+import type { SapAdapter } from "../sap/adapter.js"
 import { crearSap, diferenciaPaquete, preparar, recalcularOrden, type Preparado } from "./flujo.js"
 import { leerAprobacionCruda } from "./paquete.js"
 import { canonico, sinConfirmador } from "./payload.js"
@@ -56,7 +57,7 @@ export const validar = definir({
 })
 
 export const construir_payload = definir({
-  description: "Construye la OC tal como quedaría en SAP (esquema OrdenCompra validado con zod) y guarda la trazabilidad de cada valor en out/<caso>/trazabilidad.json.",
+  description: "Construye la OC tal como quedaría en SAP (esquema OrdenCompra validado con zod) y devuelve la trazabilidad (fuente) de cada valor.",
   args: {
     caso: esquemaCaso,
     paquete: paqueteOpcional,
@@ -72,14 +73,10 @@ export const construir_payload = definir({
       if (!v.apta) return fallo(`no se construye la OC: el paquete tiene bloqueos (${codigos(v.bloqueos).join(", ")})`, { bloqueos: v.bloqueos })
       const c = await recalcularOrden(ctx, args.caso, prep.valor)
       if (!c.ok) return fallo(c.error)
-      const r = rutas(ctx, args.caso)
-      const archivoTraza = path.join(r.outCaso, "trazabilidad.json")
-      await escribir(archivoTraza, JSON.stringify(c.valor.trazabilidad, null, 2))
-      await escribir(path.join(r.outCaso, "payload.json"), JSON.stringify(c.valor.orden, null, 2))
       const pide = v.confirmaciones.length > 0
       const pos = c.valor.orden.posiciones[0]
       const resumen = `${c.valor.orden.proveedor.nombre} · ${pos.cantidad} ${pos.unidad} × ${pos.precio_unitario.toLocaleString("es-CO")} ${c.valor.orden.moneda}${pide ? ` · excepciones: ${codigos(v.confirmaciones).join(", ")}` : ""}`
-      return ok({ payload: c.valor.orden, trazabilidad: relativa(ctx, archivoTraza), derivados: v.derivados, confirmaciones: v.confirmaciones, ...(pide ? { pide_confirmacion: true } : {}), resumen })
+      return ok({ payload: c.valor.orden, trazabilidad: c.valor.trazabilidad, derivados: v.derivados, confirmaciones: v.confirmaciones, ...(pide ? { pide_confirmacion: true } : {}), resumen })
     } catch (e) {
       return fallo(`no se pudo construir el payload: ${mensajeError(e)}`)
     }
@@ -87,7 +84,7 @@ export const construir_payload = definir({
 })
 
 export const generar_evidencia = definir({
-  description: "Genera la evidencia del correo de aprobación en out/<caso>/aprobacion.txt (con sha256) y out/<caso>/aprobacion.pdf.",
+  description: "Genera y guarda la evidencia del correo de aprobación (texto canónico con sha256 y PDF); devuelve las rutas api/evidencias/<solicitud>/aprobacion.txt y .pdf.",
   args: { caso: esquemaCaso },
   async execute(args, ctx) {
     try {
@@ -95,8 +92,8 @@ export const generar_evidencia = definir({
       if (!prep.ok) return fallo(prep.error)
       const aprob = await leerAprobacionCruda(ctx, args.caso)
       if (!aprob.ok) return fallo(`no hay correo de aprobación: ${aprob.error}. Pide al solicitante el correo de aprobación de su líder.`)
-      const ev = await escribirEvidencia(rutas(ctx, args.caso).outCaso, prep.valor.paquete.solicitud.solicitud_id, aprob.valor)
-      return ok({ ruta: relativa(ctx, ev.txt), ruta_pdf: relativa(ctx, ev.pdf), sha256: ev.sha256, resumen: `${relativa(ctx, ev.txt)} · sha256 ${ev.sha256.slice(0, 12)}…` })
+      const ev = await guardarEvidencia(ctx.db, prep.valor.paquete.solicitud.solicitud_id, aprob.valor)
+      return ok({ ruta: ev.txt, ruta_pdf: ev.pdf, sha256: ev.sha256, resumen: `${ev.txt} · sha256 ${ev.sha256.slice(0, 12)}…` })
     } catch (e) {
       return fallo(`no se pudo generar la evidencia: ${mensajeError(e)}`)
     }
@@ -105,8 +102,8 @@ export const generar_evidencia = definir({
 
 async function controlar(ctx: CtxHerramienta, prep: Preparado, resultado: ResultadoControl, numero: string | null = null): Promise<void> {
   const v = prep.validacion
-  const fila: FilaControl = { solicitud_id: prep.paquete.solicitud.solicitud_id, resultado, numero_oc: numero, retroactiva: v.retroactiva, bloqueos: codigos(v.bloqueos), confirmaciones: codigos(v.confirmaciones) }
-  await registrarControl(rutas(ctx).control, fila)
+  const fila: FilaControl = { solicitud_id: prep.paquete.solicitud.solicitud_id, resultado, numero_oc: numero, retroactiva: v.retroactiva, bloqueos: codigos(v.bloqueos), confirmaciones: codigos(v.confirmaciones), usuario: ctx.usuario }
+  await registrarControl(ctx.db, fila)
 }
 
 /** CA2: si el modelo envía un payload, debe ser idéntico al recalculado (salvo quién confirmó). */
@@ -131,12 +128,11 @@ export const crear = definir({
         await controlar(ctx, p, "bloqueada")
         return fallo(`OC no creada: bloqueos ${codigos(v.bloqueos).join(", ")}`, { bloqueos: v.bloqueos, accion_sugerida: v.bloqueos.map((b) => b.accion_sugerida).filter(Boolean) })
       }
-      const sap = crearSap(ctx, p.ref)
+      const sap = crearSap(ctx)
+      // Atajo de solo lectura: conserva la semántica de siempre (una OC ya creada se devuelve sin pedir
+      // confirmación ni payload). No es la guarda contra duplicados: esa es crearOrden, atómica.
       const existente = await sap.buscarOrdenPorReferencia(p.paquete.solicitud.solicitud_id)
-      if (existente) {
-        await controlar(ctx, p, "existente", existente.numero_oc)
-        return ok({ numero_oc: existente.numero_oc, fecha: null, idempotente: true, resumen: `ya existía la OC ${existente.numero_oc} para ${p.paquete.solicitud.solicitud_id} (idempotente)` })
-      }
+      if (existente) return await responderExistente(ctx, p, existente.numero_oc, null)
       return await crearNueva(args, ctx, p, sap)
     } catch (e) {
       return fallo(`no se pudo crear la OC: ${mensajeError(e)}`)
@@ -144,7 +140,12 @@ export const crear = definir({
   },
 })
 
-async function crearNueva(args: { caso: string; payload?: OrdenCompra; confirmado: boolean }, ctx: CtxHerramienta, p: Preparado, sap: ReturnType<typeof crearSap>): Promise<string> {
+async function responderExistente(ctx: CtxHerramienta, p: Preparado, numero: string, fecha: string | null): Promise<string> {
+  await controlar(ctx, p, "existente", numero)
+  return ok({ numero_oc: numero, fecha, idempotente: true, resumen: `ya existía la OC ${numero} para ${p.paquete.solicitud.solicitud_id} (idempotente)` })
+}
+
+async function crearNueva(args: { caso: string; payload?: OrdenCompra; confirmado: boolean }, ctx: CtxHerramienta, p: Preparado, sap: SapAdapter): Promise<string> {
   const v = p.validacion
   const c = await recalcularOrden(ctx, args.caso, p)
   if (!c.ok) {
@@ -164,18 +165,18 @@ async function crearNueva(args: { caso: string; payload?: OrdenCompra; confirmad
     await controlar(ctx, p, "bloqueada")
     return fallo("SAP no reconoce el proveedor como activo; no se crea la OC.")
   }
-  const confirmador = `analista (sesión ${ctx.sessionId})`
-  const orden: OrdenCompra = { ...c.valor.orden, excepciones: c.valor.orden.excepciones.map((e) => ({ ...e, confirmado_por: confirmador })) }
+  const orden: OrdenCompra = { ...c.valor.orden, excepciones: c.valor.orden.excepciones.map((e) => ({ ...e, confirmado_por: ctx.usuario })) }
   const ev = await generarEvidenciaInterna(ctx, args.caso, p)
-  const r = await sap.crearOrden(orden)
-  await escribir(path.join(rutas(ctx, args.caso).outCaso, "payload.json"), JSON.stringify(orden, null, 2))
+  // Comprobar "ya existe" y crear es un solo paso atómico: si otra llamada se adelantó, llega creada=false.
+  const r = await sap.crearOrden(orden, ctx.usuario)
+  if (!r.creada) return await responderExistente(ctx, p, r.numero_oc, r.fecha)
   await controlar(ctx, p, "creada", r.numero_oc)
-  return ok({ numero_oc: r.numero_oc, fecha: r.fecha, idempotente: false, retroactiva: v.retroactiva, evidencia: ev, control: relativa(ctx, rutas(ctx).control), resumen: `OC ${r.numero_oc} creada${v.retroactiva ? " (retroactiva)" : ""}` })
+  return ok({ numero_oc: r.numero_oc, fecha: r.fecha, idempotente: false, retroactiva: v.retroactiva, evidencia: ev, control: "api/control", resumen: `OC ${r.numero_oc} creada${v.retroactiva ? " (retroactiva)" : ""}` })
 }
 
-async function generarEvidenciaInterna(ctx: CtxHerramienta, caso: string, p: Preparado): Promise<{ txt: string; pdf: string } | null> {
+async function generarEvidenciaInterna(ctx: CtxHerramienta, caso: string, p: Preparado): Promise<Pick<Evidencia, "txt" | "pdf"> | null> {
   const aprob = await leerAprobacionCruda(ctx, caso)
   if (!aprob.ok) return null
-  const ev = await escribirEvidencia(rutas(ctx, caso).outCaso, p.paquete.solicitud.solicitud_id, aprob.valor)
-  return { txt: relativa(ctx, ev.txt), pdf: relativa(ctx, ev.pdf) }
+  const ev = await guardarEvidencia(ctx.db, p.paquete.solicitud.solicitud_id, aprob.valor)
+  return { txt: ev.txt, pdf: ev.pdf }
 }

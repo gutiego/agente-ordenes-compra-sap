@@ -70,7 +70,7 @@ function trazar(p: Paquete, v: Validacion, o: OrdenCompra, por: "nit" | "nombre"
     { campo: "condiciones_pago", valor: o.condiciones_pago, fuente: s.condiciones_pago ? "solicitud" : "maestro.proveedores", nota: s.condiciones_pago ? undefined : "derivado (RC7)" },
     { campo: "aprobador.email", valor: o.aprobador.email, fuente: "aprobacion" },
     { campo: "aprobador.fecha_aprobacion", valor: o.aprobador.fecha_aprobacion, fuente: "aprobacion" },
-    { campo: "aprobador.evidencia_sha256", valor: o.aprobador.evidencia_sha256, fuente: "derivado", nota: "sha256 de out/<caso>/aprobacion.txt (contenido)" },
+    { campo: "aprobador.evidencia_sha256", valor: o.aprobador.evidencia_sha256, fuente: "derivado", nota: "sha256 del contenido canónico de la evidencia (api/evidencias/<solicitud>/aprobacion.txt)" },
     { campo: "posiciones[0].numero", valor: pos.numero, fuente: "derivado", nota: "posiciones de 10 en 10" },
     { campo: "posiciones[0].descripcion", valor: pos.descripcion, fuente: "solicitud", nota: pos.descripcion === s.descripcion ? undefined : `derivado: recortada a texto breve SAP (original ${s.descripcion.length} caracteres)` },
     { campo: "posiciones[0].cantidad", valor: pos.cantidad, fuente: "solicitud" },

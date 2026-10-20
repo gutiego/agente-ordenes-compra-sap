@@ -46,4 +46,4 @@ Los umbrales (2 %, ± 1, sociedad 1000, numeración desde 4500000001, patrones d
 
 ## OC retroactivas
 
-Una OC es retroactiva cuando la factura es anterior a la solicitud: la compra ocurrió sin OC previa. La dirección quiere **medirlas**; el agente las crea solo con confirmación y quedan con `retroactiva = true` en `out/control.csv`.
+Una OC es retroactiva cuando la factura es anterior a la solicitud: la compra ocurrió sin OC previa. La dirección quiere **medirlas**; el agente las crea solo con confirmación y quedan con `retroactiva = true` en el log de control (`/api/control`).

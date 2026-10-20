@@ -1,6 +1,6 @@
-// Log de control para contabilidad/auditoría: out/control.csv (HU-5). Una fila por intento de creación.
-import { appendFile, mkdir, readFile } from "node:fs/promises"
-import path from "node:path"
+// Log de control para contabilidad/auditoría (HU-5): tabla `control`, una fila por intento de creación, solo inserciones.
+import type { Db } from "../db/index.js"
+import { mensajeError } from "./comun.js"
 
 export type ResultadoControl = "creada" | "existente" | "bloqueada" | "pendiente_confirmacion" | "rechazada" | "error"
 
@@ -11,19 +11,19 @@ export interface FilaControl {
   retroactiva: boolean
   bloqueos: string[]
   confirmaciones: string[]
+  /** Usuario autenticado que hizo el intento. */
+  usuario: string
 }
 
-const ENCABEZADO = "solicitud_id,resultado,numero_oc,retroactiva,bloqueos,confirmaciones,ts\n"
-const celda = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v)
-
-/** Agrega la fila (crea el archivo con encabezado si no existe). Nunca lanza. */
-export async function registrarControl(archivo: string, f: FilaControl): Promise<void> {
+/** Inserta la fila en `control`. Nunca lanza: un fallo se reporta por stderr y no tumba la herramienta. */
+export async function registrarControl(db: Db, f: FilaControl): Promise<void> {
   try {
-    await mkdir(path.dirname(archivo), { recursive: true })
-    const existe = await readFile(archivo, "utf8").then(() => true, () => false)
-    const valores = [f.solicitud_id, f.resultado, f.numero_oc ?? "", String(f.retroactiva), f.bloqueos.join("|"), f.confirmaciones.join("|"), new Date().toISOString()]
-    await appendFile(archivo, (existe ? "" : ENCABEZADO) + valores.map(celda).join(",") + "\n")
-  } catch {
-    // el log de control no debe tumbar la herramienta
+    await db.query(
+      `INSERT INTO control (solicitud_id, resultado, numero_oc, retroactiva, bloqueos, confirmaciones, usuario)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [f.solicitud_id, f.resultado, f.numero_oc, f.retroactiva, f.bloqueos, f.confirmaciones, f.usuario],
+    )
+  } catch (e) {
+    console.error(JSON.stringify({ nivel: "error", evento: "control_no_registrado", solicitud_id: f.solicitud_id, resultado: f.resultado, error: mensajeError(e) }))
   }
 }

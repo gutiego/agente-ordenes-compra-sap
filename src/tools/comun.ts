@@ -1,5 +1,5 @@
 // Utilidades compartidas por las herramientas. No exporta herramientas.
-import { readFile, mkdir, writeFile } from "node:fs/promises"
+import { readFile } from "node:fs/promises"
 import path from "node:path"
 import { z } from "zod"
 import type { Db } from "../db/index.js"
@@ -39,30 +39,22 @@ export const esquemaCaso = z
   .regex(/^[a-z0-9-]+$/, "solo minúsculas, números y guiones")
   .describe("Nombre de la carpeta del caso en fixtures/reto-03/solicitudes/, ej. 'sol-001'")
 
+/** Rutas de solo lectura (fixtures y reglas). El estado no vive en disco: va a la base (`ctx.db`). */
 export interface Rutas {
   fixtures: string
   caso: string
   maestros: string
   reglas: string
-  out: string
-  outCaso: string
-  sap: string
-  control: string
 }
 
+/** Resuelve las rutas de lectura desde la raíz del proyecto; `caso` apunta a fixtures/reto-03/solicitudes/<caso>. */
 export function rutas(ctx: CtxHerramienta, caso = ""): Rutas {
   const fixtures = path.join(ctx.directory, "fixtures", "reto-03")
-  const outEnv = process.env.OUT_DIR ?? "out"
-  const out = path.isAbsolute(outEnv) ? outEnv : path.join(ctx.directory, outEnv)
   return {
     fixtures,
     caso: path.join(fixtures, "solicitudes", caso),
     maestros: path.join(fixtures, "maestros"),
     reglas: path.join(ctx.directory, "src", "knowledge", "reglas-oc.json"),
-    out,
-    outCaso: path.join(out, caso),
-    sap: path.join(out, "sap"),
-    control: path.join(out, "control.csv"),
   }
 }
 
@@ -90,16 +82,7 @@ export async function leerJson<T>(archivo: string, esquema: z.ZodType<T>): Promi
   return { ok: true, valor: r.data }
 }
 
-export async function escribir(archivo: string, contenido: string | Uint8Array): Promise<void> {
-  await mkdir(path.dirname(archivo), { recursive: true })
-  await writeFile(archivo, contenido)
-}
-
-/** Ruta relativa a la raíz del proyecto, con "/" para que sea legible en el chat. */
-export function relativa(ctx: CtxHerramienta, archivo: string): string {
-  return path.relative(ctx.directory, archivo).split(path.sep).join("/")
-}
-
+/** Mensaje legible de cualquier valor lanzado. */
 export function mensajeError(e: unknown): string {
   return e instanceof Error ? e.message : String(e)
 }

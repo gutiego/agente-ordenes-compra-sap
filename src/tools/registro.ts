@@ -1,9 +1,7 @@
-// Registro de herramientas: nombre <archivo>_<export>, validación zod, ejecución segura y logs (CA4, RN5).
-import { appendFile, mkdir } from "node:fs/promises"
-import path from "node:path"
+// Registro de herramientas: nombre <archivo>_<export>, validación zod, ejecución segura y trazas en `log_herramientas` (CA4, RN5).
 import { z } from "zod"
 import * as oc from "./oc.js"
-import { rutas, mensajeError, type CtxHerramienta } from "./comun.js"
+import { mensajeError, type CtxHerramienta } from "./comun.js"
 
 interface HerramientaGenerica {
   description: string
@@ -33,6 +31,7 @@ export const herramientas: Map<string, HerramientaGenerica> = new Map(
   ),
 )
 
+/** Definiciones (nombre, descripción, JSON Schema) que se envían al modelo. */
 export function definiciones(): DefinicionHerramienta[] {
   return [...herramientas.entries()].map(([nombre, h]) => {
     const { $schema: _omitido, ...esquema } = z.toJSONSchema(z.object(h.args)) as Record<string, unknown>
@@ -50,19 +49,16 @@ function resumir(salida: string): { ok: boolean; resumen: string } {
   }
 }
 
+/** Inserta la traza de la llamada en `log_herramientas`. Nunca lanza: el log no debe tumbar la ejecución. */
 async function registrarLog(ctx: CtxHerramienta, e: EjecucionHerramienta): Promise<void> {
+  const caso = (e.args as { caso?: unknown } | null)?.caso
   try {
-    const r = rutas(ctx)
-    const caso = (e.args as { caso?: unknown } | null)?.caso
-    const linea = JSON.stringify({ ts: new Date().toISOString(), sesion: ctx.sessionId, herramienta: e.nombre, caso, ok: e.ok, resumen: e.resumen }) + "\n"
-    await mkdir(r.out, { recursive: true })
-    await appendFile(path.join(r.out, "log.jsonl"), linea)
-    if (typeof caso === "string" && /^[a-z0-9-]+$/.test(caso)) {
-      await mkdir(path.join(r.out, caso), { recursive: true })
-      await appendFile(path.join(r.out, caso, "log.jsonl"), linea)
-    }
-  } catch {
-    // el log nunca debe tumbar la ejecución
+    await ctx.db.query(
+      "INSERT INTO log_herramientas (sesion, usuario, herramienta, caso, ok, resumen) VALUES ($1, $2, $3, $4, $5, $6)",
+      [ctx.sessionId, ctx.usuario, e.nombre, typeof caso === "string" ? caso.slice(0, 200) : null, e.ok, e.resumen],
+    )
+  } catch (err) {
+    console.error(JSON.stringify({ nivel: "error", evento: "log_herramienta_no_registrado", herramienta: e.nombre, error: mensajeError(err) }))
   }
 }
 

@@ -1,8 +1,8 @@
 // Evidencia de aprobación (HU-4): texto canónico + sha256 (P0) y PDF con el mismo contenido (P1).
+// Se guarda en la tabla `evidencias`; `src/app.ts` la sirve en api/evidencias/<solicitud>/aprobacion.{txt,pdf}.
 import { createHash } from "node:crypto"
-import path from "node:path"
 import { PDFDocument, StandardFonts, rgb, type PDFFont } from "pdf-lib"
-import { escribir } from "./comun.js"
+import type { Db } from "../db/index.js"
 import type { AprobacionCruda } from "./tipos.js"
 
 /** Contenido canónico (determinista) del correo de aprobación. Su sha256 es el que viaja en el payload. */
@@ -19,6 +19,7 @@ export function contenidoEvidencia(solicitudId: string, a: AprobacionCruda): str
   ].join("\n")
 }
 
+/** sha256 hex del texto en UTF-8. */
 export const sha256 = (texto: string): string => createHash("sha256").update(texto, "utf8").digest("hex")
 
 // Helvetica estándar usa WinAnsi: cubre tildes y ñ, no emojis.
@@ -37,7 +38,7 @@ function partir(texto: string, fuente: PDFFont, tam: number, ancho: number): str
   return [...lineas, actual]
 }
 
-async function generarPdf(archivo: string, contenido: string, hash: string): Promise<void> {
+async function generarPdf(contenido: string, hash: string): Promise<Uint8Array> {
   const doc = await PDFDocument.create()
   const normal = await doc.embedFont(StandardFonts.Helvetica)
   const negrita = await doc.embedFont(StandardFonts.HelveticaBold)
@@ -52,22 +53,32 @@ async function generarPdf(archivo: string, contenido: string, hash: string): Pro
     }
   })
   pagina.drawText(`sha256 del contenido: ${hash}`, { x: 50, y: y - 20, size: 8, font: normal, color: rgb(0.35, 0.35, 0.35) })
-  await escribir(archivo, await doc.save())
+  return doc.save()
 }
 
 export interface Evidencia {
+  /** Ruta (relativa al servidor, sin barra inicial) del texto canónico. */
   txt: string
+  /** Ruta (relativa al servidor, sin barra inicial) del PDF. */
   pdf: string
   sha256: string
 }
 
-/** Escribe aprobacion.txt (contenido + línea sha256) y aprobacion.pdf en el directorio del caso. Idempotente. */
-export async function escribirEvidencia(dirCaso: string, solicitudId: string, a: AprobacionCruda): Promise<Evidencia> {
+/** Rutas HTTP con las que `src/app.ts` sirve la evidencia de una solicitud. */
+export function rutasEvidencia(solicitudId: string): { txt: string; pdf: string } {
+  const base = `api/evidencias/${encodeURIComponent(solicitudId)}`
+  return { txt: `${base}/aprobacion.txt`, pdf: `${base}/aprobacion.pdf` }
+}
+
+/** Guarda contenido canónico, sha256 y PDF en `evidencias` (UPSERT por solicitud_id: idempotente). */
+export async function guardarEvidencia(db: Db, solicitudId: string, a: AprobacionCruda): Promise<Evidencia> {
   const contenido = contenidoEvidencia(solicitudId, a)
   const hash = sha256(contenido)
-  const txt = path.join(dirCaso, "aprobacion.txt")
-  const pdf = path.join(dirCaso, "aprobacion.pdf")
-  await escribir(txt, `${contenido}\n\n---\nsha256: ${hash}\n`)
-  await generarPdf(pdf, contenido, hash)
-  return { txt, pdf, sha256: hash }
+  const pdf = await generarPdf(contenido, hash)
+  await db.query(
+    `INSERT INTO evidencias (solicitud_id, contenido, sha256, pdf) VALUES ($1, $2, $3, $4)
+     ON CONFLICT (solicitud_id) DO UPDATE SET contenido = EXCLUDED.contenido, sha256 = EXCLUDED.sha256, pdf = EXCLUDED.pdf, creada_en = now()`,
+    [solicitudId, contenido, hash, Buffer.from(pdf)],
+  )
+  return { ...rutasEvidencia(solicitudId), sha256: hash }
 }

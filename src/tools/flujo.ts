@@ -8,7 +8,7 @@ import { cargarReferencia, type Referencia } from "./maestros.js"
 import { leerAprobacionCruda, leerPaquete } from "./paquete.js"
 import { construirOrden, type Construccion } from "./payload.js"
 import type { Paquete, Validacion } from "./tipos.js"
-import { SapMock } from "../sap/mock.js"
+import { SapPostgres } from "../sap/postgres.js"
 import type { SapAdapter } from "../sap/adapter.js"
 import path from "node:path"
 
@@ -18,6 +18,7 @@ export interface Preparado {
   validacion: Validacion
 }
 
+/** Lee el paquete del caso, carga maestros y reglas, y aplica los controles RC1–RC10. No lanza por datos inválidos. */
 export async function preparar(ctx: CtxHerramienta, caso: string): Promise<Lectura<Preparado>> {
   const ref = await cargarReferencia(ctx)
   if (!ref.ok) return ref
@@ -51,7 +52,7 @@ export function diferenciaPaquete(enviado: unknown, real: Paquete): string | nul
   return distintos.length ? `el paquete enviado no coincide con el caso en: ${distintos.join(", ")}. Usa los valores de oc_leer_paquete sin modificarlos.` : null
 }
 
-export function crearSap(ctx: CtxHerramienta, ref: Referencia): SapAdapter {
-  const r = rutas(ctx)
-  return new SapMock(r.sap, path.join(r.maestros, "proveedores.json"), ref.reglas.numero_oc_inicial)
+/** SAP simulado sobre la base del contexto. La numeración la da la SEQUENCE `seq_numero_oc` (migración 1). */
+export function crearSap(ctx: CtxHerramienta): SapAdapter {
+  return new SapPostgres(ctx.db, path.join(rutas(ctx).maestros, "proveedores.json"))
 }
