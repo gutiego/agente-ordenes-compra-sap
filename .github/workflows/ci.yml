@@ -1,0 +1,44 @@
+# Integración continua: tipos, lint, tests con cobertura, demo end-to-end y auditoría de dependencias.
+# Todo corre contra PGlite en memoria: no necesita secretos, DATABASE_URL ni clave del LLM.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    name: Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - name: Tipos
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Tests con cobertura
+        run: npm run test:coverage
+      - name: Demo (6 casos sin LLM)
+        run: npm run demo
+      - name: Auditoría de dependencias de producción
+        run: npm audit --omit=dev --audit-level=high

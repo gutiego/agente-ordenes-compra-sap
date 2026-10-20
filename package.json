@@ -11,7 +11,11 @@
     "start": "tsx --env-file-if-exists=.env src/server.ts",
     "demo": "tsx demo.ts",
     "typecheck": "tsc --noEmit",
-    "modulo": "tsx scripts/empaquetar-modulo.ts"
+    "modulo": "tsx scripts/empaquetar-modulo.ts",
+    "test": "tsx --test \"test/**/*.test.ts\"",
+    "test:coverage": "tsx --test --experimental-test-coverage --test-coverage-include=\"src/**\" \"test/**/*.test.ts\"",
+    "lint": "biome lint .",
+    "check": "npm run typecheck && npm run lint && npm test"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",
