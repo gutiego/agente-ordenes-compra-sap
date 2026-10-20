@@ -42,7 +42,7 @@ export function parsearCotizacion(texto: string): Cotizacion | null {
   if (!total) return null
   const fecha = capturar(texto, /^Fecha:\s*(\d{4}-\d{2}-\d{2})/m)
   const dias = capturar(texto, /Validez de la oferta:\s*(\d+)\s*d[ií]as/i)
-  const nit = capturar(texto, /^NIT:\s*([\d.\-]+)/m)
+  const nit = capturar(texto, /^NIT:\s*([\d.-]+)/m)
   return {
     referencia: capturar(texto, /^COTIZACI[ÓO]N\s+(\S+)/m),
     fecha,

@@ -83,10 +83,10 @@
       Hola. Leo el paquete de cada solicitud de compra, lo valido contra los maestros y preparo la orden de compra en SAP (simulado). Casos disponibles:
       <code>sol-001</code> … <code>sol-006</code>.
       <div class="sugerencias" style="margin-top:8px">
-        <button data-texto='Procesa la solicitud "sol-004". Muéstrame la OC como quedaría en SAP, qué validaciones pasó y cuáles no, y no la crees hasta que yo lo confirme.'>Procesar sol-004 (ejemplo PRD)</button>
-        <button data-texto='Procesa la solicitud "sol-001" y crea la OC si pasa todos los controles.'>Procesar sol-001</button>
-        <button data-texto='Procesa la solicitud "sol-003".'>Procesar sol-003 (bloqueo)</button>
-        <button data-texto='Procesa la solicitud "sol-005".'>Procesar sol-005 (retroactiva)</button>
+        <button type="button" data-texto='Procesa la solicitud "sol-004". Muéstrame la OC como quedaría en SAP, qué validaciones pasó y cuáles no, y no la crees hasta que yo lo confirme.'>Procesar sol-004 (ejemplo PRD)</button>
+        <button type="button" data-texto='Procesa la solicitud "sol-001" y crea la OC si pasa todos los controles.'>Procesar sol-001</button>
+        <button type="button" data-texto='Procesa la solicitud "sol-003".'>Procesar sol-003 (bloqueo)</button>
+        <button type="button" data-texto='Procesa la solicitud "sol-005".'>Procesar sol-005 (retroactiva)</button>
       </div>
     </div>
   </div>
@@ -94,7 +94,7 @@
   <div id="pensando">El agente está pensando…</div>
   <form id="form">
     <textarea id="entrada" placeholder="Escribe un mensaje… (Enter para enviar, Shift+Enter para salto de línea)"></textarea>
-    <button id="enviar">Enviar</button>
+    <button id="enviar" type="submit">Enviar</button>
   </form>
 </div>
 <script>
@@ -166,7 +166,7 @@ const bajar = () => (chat.scrollTop = chat.scrollHeight)
 async function enviar(texto) {
   texto = texto.trim()
   if (!texto) return
-  document.querySelectorAll(".acciones").forEach((a) => a.remove())
+  document.querySelectorAll(".acciones").forEach((a) => { a.remove() })
   pintarUsuario(texto)
   $("entrada").value = ""
   $("enviar").disabled = true
@@ -200,7 +200,7 @@ async function cargarHistorial() {
 
 $("form").onsubmit = (ev) => { ev.preventDefault(); enviar($("entrada").value) }
 $("entrada").onkeydown = (ev) => { if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); enviar($("entrada").value) } }
-document.querySelectorAll(".sugerencias button").forEach((b) => (b.onclick = () => enviar(b.dataset.texto)))
+document.querySelectorAll(".sugerencias button").forEach((b) => { b.onclick = () => enviar(b.dataset.texto) })
 $("nueva").onclick = () => { try { localStorage.removeItem(claveSesion()) } catch {}; location.reload() }
 $("salir").onclick = () => salir()
 

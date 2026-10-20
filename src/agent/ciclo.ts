@@ -1,5 +1,5 @@
 // Ciclo del agente: prompt -> modelo -> herramientas -> modelo ... -> respuesta.
-import { ErrorLLM, type ProveedorLLM, type ResultadoHerramienta } from "../llm/adapter.js"
+import { ErrorLLM, type ProveedorLLM, type RespuestaLLM, type ResultadoHerramienta } from "../llm/adapter.js"
 import { definiciones, ejecutarHerramienta } from "../tools/registro.js"
 import type { Db } from "../db/index.js"
 import type { Sesion, LlamadaVisible } from "./sesiones.js"
@@ -60,7 +60,7 @@ export async function ejecutarTurno(sesion: Sesion, mensaje: string, cfg: Config
   let pidio = false
 
   for (let i = 0; i < cfg.maxIteraciones; i++) {
-    let r
+    let r: RespuestaLLM
     try {
       r = await cfg.llm.enviar(sesion.mensajes, herramientas, cfg.sistema)
     } catch (e) {
