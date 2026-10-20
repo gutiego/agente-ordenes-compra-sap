@@ -6,6 +6,8 @@ Agente de chat que lee el paquete de una solicitud de compra (solicitud, cotizac
 
 Incluye autenticación con roles, persistencia en Postgres, control de concurrencia, pruebas automatizadas y CI/CD. Detalle y decisiones en [SOLUCION.md](SOLUCION.md) y [docs/decisiones.md](docs/decisiones.md).
 
+**Demo en vivo:** https://agente-ordenes-compra-sap-r7u5.onrender.com (requiere token de acceso; plan gratuito de Render: la primera visita puede tardar 30–60 s en despertar).
+
 ## Arquitectura
 
 ```mermaid

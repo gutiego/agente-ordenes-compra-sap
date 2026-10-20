@@ -173,6 +173,7 @@ Las decisiones de arquitectura con su alternativa descartada están en [`docs/de
 | HU-5 Crear en SAP simulado | Hecho | Adaptador OData real (§7). |
 | HU-6 Errores | Hecho | — |
 | Auth, concurrencia, persistencia, CI/CD | Hecho (§6) | SSO corporativo; rate limit compartido entre instancias. |
+| Link público | Hecho | https://agente-ordenes-compra-sap-r7u5.onrender.com (Render + Neon; se despliega solo cuando la CI pasa). |
 
 ## 12. Uso de IA
 
